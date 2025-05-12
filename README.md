@@ -1,1 +1,1 @@
-# event-scheduler-backend
+# event-scheduler
