@@ -1,0 +1,208 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Event Scheduler</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: auto;
+      padding: 20px;
+      background: #f4f6f8;
+      color: #333;
+    }
+    h1, h3 {
+      color: #222;
+    }
+    form, .search-section {
+      margin-bottom: 20px;
+      background: #fff;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    }
+    input, select, button {
+      margin: 5px 0;
+      padding: 8px;
+      font-size: 14px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    button {
+      cursor: pointer;
+      background-color: #2b7cff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+    }
+    ul#eventList {
+      list-style: none;
+      padding: 0;
+    }
+    ul#eventList li {
+      background: #fff;
+      margin-bottom: 10px;
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .event-text {
+      flex-grow: 1;
+    }
+    .event-actions button {
+      margin-left: 10px;
+      font-size: 12px;
+      padding: 6px 10px;
+    }
+    .badge {
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      color: white;
+      margin-left: 8px;
+    }
+    .badge-upcoming { background: #007bff; }
+    .badge-attending { background: #28a745; }
+    .badge-maybe { background: #ffc107; color: black; }
+    .badge-declined { background: #dc3545; }
+  </style>
+</head>
+<body>
+  <h1>Event Scheduler</h1>
+
+  <form id="eventForm">
+    <input type="text" id="title" placeholder="Title" required><br>
+    <input type="datetime-local" id="datetime" required><br>
+    <input type="text" id="location" placeholder="Location" required><br>
+    <input type="text" id="description" placeholder="Description" required><br>
+    <select id="status">
+      <option value="upcoming">Upcoming</option>
+      <option value="attending">Attending</option>
+      <option value="maybe">Maybe</option>
+      <option value="declined">Declined</option>
+    </select><br>
+    <button type="submit">Save Event</button>
+  </form>
+
+  <div class="search-section">
+    <h3>Search Events</h3>
+    <input type="text" id="searchTitle" placeholder="Search by Title">
+    <input type="text" id="searchLocation" placeholder="Search by Location">
+    <select id="searchStatus">
+      <option value="">All Statuses</option>
+      <option value="upcoming">Upcoming</option>
+      <option value="attending">Attending</option>
+      <option value="maybe">Maybe</option>
+      <option value="declined">Declined</option>
+    </select>
+    <button onclick="searchEvents()">Search</button>
+    <button onclick="clearSearch()">Clear</button>
+  </div>
+
+  <ul id="eventList"></ul>
+
+  <script>
+    const API = 'http://127.0.0.1:8000';
+
+    const titleInput = document.getElementById('title');
+    const datetimeInput = document.getElementById('datetime');
+    const locationInput = document.getElementById('location');
+    const descriptionInput = document.getElementById('description');
+    const statusInput = document.getElementById('status');
+
+    let editingEventId = null;
+
+    document.getElementById('eventForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const event = {
+        title: titleInput.value,
+        datetime: datetimeInput.value,
+        location: locationInput.value,
+        description: descriptionInput.value,
+        status: statusInput.value.toLowerCase(),
+      };
+      const url = editingEventId ? `${API}/events/${editingEventId}` : `${API}/events/`;
+      const method = editingEventId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(event)
+      });
+
+      if (res.ok) {
+        loadEvents();
+        e.target.reset();
+        editingEventId = null;
+      } else {
+        alert("Error: Could not save event. Check console.");
+        console.error(await res.text());
+      }
+    };
+
+    async function searchEvents() {
+      const title = document.getElementById('searchTitle').value;
+      const location = document.getElementById('searchLocation').value;
+      const status = document.getElementById('searchStatus').value;
+      const res = await fetch(`${API}/search/?title=${title}&location=${location}&status=${status}`);
+      const events = await res.json();
+      renderEvents(events);
+    }
+
+    function clearSearch() {
+      document.getElementById('searchTitle').value = '';
+      document.getElementById('searchLocation').value = '';
+      document.getElementById('searchStatus').value = '';
+      loadEvents();
+    }
+
+    async function loadEvents() {
+      const res = await fetch(`${API}/events/`);
+      const events = await res.json();
+      renderEvents(events);
+    }
+
+    function renderEvents(events) {
+      const list = document.getElementById('eventList');
+      list.innerHTML = '';
+      events.forEach(event => {
+        const li = document.createElement('li');
+        const badgeClass = `badge-${event.status}`;
+        li.innerHTML = `
+          <div class="event-text">
+            <strong>${event.title}</strong> @ ${event.datetime}
+            <span class="badge ${badgeClass}">${event.status}</span><br>
+            📍 ${event.location} — 📝 ${event.description}
+          </div>
+          <div class="event-actions">
+            <button onclick="editEvent(${JSON.stringify(event)})">✏️ Edit</button>
+            <button onclick="deleteEvent(${event.id})">❌</button>
+          </div>`;
+        list.appendChild(li);
+      });
+    }
+
+    async function deleteEvent(id) {
+      await fetch(`${API}/events/${id}`, {method: 'DELETE'});
+      loadEvents();
+    }
+
+    function editEvent(event) {
+      titleInput.value = event.title;
+      datetimeInput.value = event.datetime;
+      locationInput.value = event.location;
+      descriptionInput.value = event.description;
+      statusInput.value = event.status;
+      editingEventId = event.id;
+    }
+
+    loadEvents();
+  </script>
+</body>
+</html>
